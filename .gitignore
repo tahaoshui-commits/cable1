@@ -1,0 +1,50 @@
+# Local secrets
+.env
+.env.*
+*.env
+*.key
+*_key
+.dashscope_key
+.deepseek_key
+.openai_key
+.github_token
+
+# Python and ROS build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+build/
+install/
+log/
+
+# Runtime state and generated data
+runs/
+saved_images/
+defect_captures/
+false_positive_samples/
+review_sample_pool/
+inspection_reports/
+*.log
+*.jsonl
+
+# Datasets and model weights/binaries
+datasets/
+models/
+*.pt
+*.pth
+*.onnx
+*.bin
+*.engine
+*.tflite
+
+# Local backups and editor files
+*.bak
+*.bak_*
+*.from_backup_*
+*~
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
