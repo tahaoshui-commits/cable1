@@ -1,85 +1,168 @@
-# 日行八万里：RDK X5 电缆缺陷智能检测系统
+# 日行八万里：RDK X5 电缆缺陷智能巡检系统
 
-这是一个运行在地平线 RDK X5 开发板上的 ROS2 电缆缺陷检测项目。系统集成摄像头采集、YOLO26/BPU 缺陷识别、步进电机控制、Web 控制台、红外/阻抗辅助检测、数据集管理、训练转换流程和大模型智能助手，面向电缆巡检、教学演示和边缘 AI 应用验证。
+`cable1` 是一个运行在地平线 RDK X5 上的 ROS2 电缆缺陷巡检项目。系统把可见光摄像头、YOLO26/BPU 缺陷检测、红外热异常检测、步进电机运动控制、Web 控制台、AD5933 阻抗分析、数据集管理、模型训练/转换/部署和大模型助手集成到同一套边缘 AI 工作流中。
 
-## 核心功能
+项目适合用于电缆表面缺陷巡检、教学演示、RDK X5 边缘推理验证，以及视觉、红外、阻抗多模态融合检测实验。
 
-- 实时采集摄像头画面并推送到 Web 控制台
-- 使用地平线 BPU 加速 YOLO26 电缆缺陷检测
-- 检测到缺陷后联动电机控制、拍照留存和检测记录
-- 支持红外图像温度分析和阻抗检测数据融合
-- 提供检测报告、误报样本、复核样本池和数据集管理能力
-- 支持上传 YOLO 数据集、训练、ONNX 导出、BIN 转换和模型暂存部署
-- 提供右侧智能助手接口，可接入 OpenAI 兼容的大模型服务
+## 核心能力
+
+- 实时采集主摄像头画面，发布 ROS2 图像话题并通过 Web 端推流。
+- 使用 `hobot_dnn` 调用地平线 BPU 运行 YOLO26 模型，检测电缆表面缺陷。
+- 在视觉检测前提取电缆暗色带，过滤背景干扰，并对 YOLO 框做 OpenCV ROI 精修。
+- 支持红外摄像头接入，输出热异常诊断结果和伪彩色红外画面。
+- 通过 GPIO 控制步进电机，支持连续运动、定距移动、移动到指定位置、速度百分比和软件行程限位。
+- Web 控制台提供视频流、红外流、电机控制、状态面板、数据集管理、样本复核、模型上传/部署和巡检报告入口。
+- 集成 AD5933 阻抗检测模块，可进行低阻、开路、潮湿等辅助诊断。
+- 支持 YOLO 数据集上传、误报样本收集、复核样本池、训练流水线、ONNX 导出和 RDK X5 BPU BIN 转换。
+- 提供 OpenAI 兼容的大模型助手接口，用于运维问答和巡检辅助。
 
 ## 硬件与运行环境
 
 - 开发板：地平线 RDK X5
 - 系统：Ubuntu + ROS2 Humble
-- 推理：hobot_dnn / 地平线 BPU
-- 摄像头：默认 `/dev/video0`
-- 电机控制：GPIO BOARD 模式
-- Web 服务：默认 `http://<board-ip>:8010`
+- 推理：`hobot_dnn` / Horizon BPU
+- 主摄像头：默认从 `/camera/image_raw` 发布，可在启动参数中指定 `/dev/v4l/by-id/...`
+- 红外摄像头：默认发布 `/infrared/image_raw`
+- 电机控制：Hobot GPIO，BOARD 编号默认 `DIR=31`、`STEP=32`、`EN=36`、`BUTTON=37`
+- Web 服务：`http://<board-ip>:8010`
 
 ## 项目结构
 
 ```text
 cable1/
 ├── src/
-│   ├── camera_pkg/          # 摄像头节点
-│   ├── detection_pkg/       # 视觉/红外检测节点
-│   ├── image_saver_pkg/     # 图像保存节点
-│   └── motor_control_pkg/   # 电机控制与 Web 后端
-├── launch/                  # ROS2 启动文件
-├── config/                  # 运行参数和当前模型状态
-├── scripts/                 # 训练到转换流水线脚本
-├── tools/                   # YOLO26 导出和 mapper 工具
-├── ad5933_cable_analyzer/   # 阻抗检测模块
-└── agentic_aiops_clean_sidebar.html  # Web 前端页面
+│   ├── camera_pkg/          # 摄像头采集节点
+│   ├── detection_pkg/       # 可见光 YOLO/BPU 检测和红外检测节点
+│   ├── image_saver_pkg/     # 定时/缺陷触发图像保存节点
+│   └── motor_control_pkg/   # 电机控制节点和 Flask Web 后端
+├── ad5933_cable_analyzer/   # AD5933 阻抗/通断/开路定位分析模块
+├── config/                  # 当前模型、运动位置和运行参数
+├── scripts/                 # 训练到 BIN 转换流水线、状态脚本
+├── tools/                   # YOLO26 训练、导出、mapper 转换工具
+├── third_party/tessdata/    # OCR/视觉相关第三方数据
+├── agentic_aiops_clean_sidebar.html  # Web 前端页面
+├── start_system.sh          # 板端一键启动脚本
+└── WEB_GUIDE.md             # Web 控制台说明
 ```
 
+> 当前仓库没有提交 `launch/` 目录，推荐使用 `start_system.sh` 或单独运行各个 ROS2 console script。
+
 ## 快速启动
+
+在 RDK X5 板端执行：
 
 ```bash
 cd /home/sunrise/cable1
 source /opt/ros/humble/setup.bash
 colcon build
 source install/setup.bash
-ros2 launch launch/cable_detection.launch.py
+./start_system.sh
 ```
 
-启动后在同一网络的浏览器访问：
+启动后，在同一网络内访问：
 
 ```text
 http://<board-ip>:8010
 ```
 
-## API 密钥配置
+脚本会依次启动主摄像头、可选红外摄像头、红外检测、BPU 缺陷检测、电机控制、可选图像保存和 Web 控制节点。日志默认写入 `/tmp/camera.log`、`/tmp/infrared_detection.log`、`/tmp/detection.log`、`/tmp/motor.log`、`/tmp/web.log`。
 
-仓库不会提交真实 API 密钥。当前代码按以下顺序读取密钥：
+## 单节点运行
 
-1. 优先读取环境变量，例如 `DASHSCOPE_API_KEY`、`LLM_API_KEY`
-2. 如果没有环境变量，读取板子本地隐藏文件，例如 `/home/sunrise/cable1/.dashscope_key`
+调试时可以单独启动节点：
 
-首次部署时可复制示例文件：
+```bash
+source /opt/ros/humble/setup.bash
+source /home/sunrise/cable1/install/setup.bash
+
+ros2 run camera_pkg camera_node
+ros2 run detection_pkg detection_node
+ros2 run detection_pkg infrared_detection_node
+ros2 run motor_control_pkg motor_control_node
+ros2 run motor_control_pkg web_control_node
+ros2 run image_saver_pkg image_saver_node
+```
+
+常用话题：
+
+- `/camera/image_raw`：主摄像头图像
+- `/detection/results`：视觉缺陷检测 JSON
+- `/detection/annotated_image`：带标注的视觉画面
+- `/infrared/results`：红外诊断 JSON
+- `/infrared/annotated_image`：伪彩色红外画面
+- `/motor/control`：电机控制命令
+- `/motor/motion_status`：电机位置、速度、限位和运动状态
+
+## 模型与数据
+
+运行时默认使用：
+
+```text
+/home/sunrise/cable1/models/deployed/current.bin
+```
+
+`config/current_model.json` 会记录当前部署模型、类别、来源路径、哈希和部署时间。模型权重、BPU BIN、数据集、训练输出、巡检报告和采集图片通常体积较大，默认不提交到仓库，建议按以下目录放置在板端：
+
+- `models/`：上传、暂存和部署后的模型
+- `datasets/`：YOLO 数据集
+- `runs/`：训练和转换输出
+- `inspection_reports/`：巡检报告
+- `false_positive_samples/`、`review_sample_pool/`：误报与复核样本
+
+训练/转换入口：
+
+```bash
+python3 scripts/train_to_bin_pipeline.py \
+  --dataset /home/sunrise/cable1/datasets/<dataset_name> \
+  --output-dir /home/sunrise/cable1/runs/<run_name>
+```
+
+流水线会优先训练或复用 `.pt`，再导出 BPU 友好的 ONNX，并通过 `hb_mapper` 或 Docker 中的 OpenExplorer 工具链生成 RDK X5 可用的 `.bin`。
+
+## Web 控制台
+
+`web_control_node` 内置 Flask 服务，默认监听 `0.0.0.0:8010`。主要能力包括：
+
+- `/video_feed`：视觉检测画面 MJPEG 流
+- `/infrared_feed`：红外画面 MJPEG 流
+- `/forward`、`/reverse`、`/stop`、`/move_to`：电机运动控制
+- `/api/status`：系统、ROS 节点、BPU、CPU、内存、磁盘和温度状态
+- `/api/inspection/*`：巡检会话与报告
+- `/api/ad5933/*`：阻抗分析动作和状态
+- `/api/datasets`、`/api/models`、`/api/pipeline/*`：数据集、模型和训练部署管理
+- `/api/claw/command`：大模型助手兼容接口
+
+前端页面为仓库根目录的 `agentic_aiops_clean_sidebar.html`。
+
+## API 密钥
+
+仓库不会提交真实 API Key。大模型相关功能优先读取环境变量，例如：
+
+```bash
+export DASHSCOPE_API_KEY=your_key_here
+export LLM_API_KEY=your_key_here
+```
+
+也可以复制示例文件到板端本地：
 
 ```bash
 cp .dashscope_key.example .dashscope_key
 chmod 600 .dashscope_key
 ```
 
-然后把真实密钥写入 `.dashscope_key`。该文件已被 `.gitignore` 排除，不会进入 GitHub 仓库。
+`.dashscope_key` 和 `.deepseek_key` 已被 `.gitignore` 排除，只应保留在本地部署环境。
 
-## 模型与数据
+## 依赖
 
-模型文件、训练输出、检测图片、报告、数据集和构建产物通常体积较大，默认不提交到仓库。建议按实际部署环境放置在：
+板端核心依赖：
 
-- 模型目录：`models/`
-- 数据集目录：`datasets/`
-- 检测报告：`inspection_reports/`
-- 训练输出：`runs/`
+- ROS2 Humble：`rclpy`、`sensor_msgs`、`std_msgs`、`cv_bridge`
+- Python：OpenCV、NumPy、Flask、Werkzeug
+- 地平线运行库：`hobot_dnn`
+- GPIO：`Hobot.GPIO`
+- AD5933：`smbus2`
+- 训练/转换环境：Ultralytics、PyTorch、ONNX Runtime、`hb_mapper` 或 OpenExplorer Docker 镜像
 
 ## 说明
 
-本项目适合地瓜开发者社区 NodeHub 展示 RDK X5 在工业视觉巡检、边缘 AI 推理和多模态检测中的应用。发布仓库时已隐藏本地 API 密钥，同时保留环境变量和本地隐藏文件两种配置方式，不影响板端继续运行。
-
+这个仓库包含 `README_cn.md` 和 `README.MD`，便于中文展示和英文平台索引。若在 Windows 上克隆时看到 `README.md` 与 `README.MD` 的大小写冲突，建议仓库只保留 `README.MD` 作为英文 README，中文内容使用 `README_cn.md`。
