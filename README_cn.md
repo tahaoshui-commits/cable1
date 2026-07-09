@@ -1,20 +1,20 @@
 # 日行八万里：RDK X5 电缆缺陷智能巡检系统
 
-`cable1` 是一个运行在地平线 RDK X5 上的 ROS2 电缆缺陷巡检项目。系统把可见光摄像头、YOLO26/BPU 缺陷检测、红外热异常检测、步进电机运动控制、Web 控制台、AD5933 阻抗分析、数据集管理、模型训练/转换/部署和大模型助手集成到同一套边缘 AI 工作流中。
+`cable1` 是一个运行在地平线 RDK X5 上的 ROS2 电缆缺陷巡检项目。系统把可见光摄像头、DINOv3 蒸馏训练、YOLO26/BPU 粗定位、OpenCV 精定位、红外热异常检测、步进电机运动控制、Web 控制台、AD5933 阻抗分析、数据集管理、模型训练/转换/部署和 OpenClaw 兼容助手接口集成到同一套边缘 AI 工作流中。
 
 项目适合用于电缆表面缺陷巡检、教学演示、RDK X5 边缘推理验证，以及视觉、红外、阻抗多模态融合检测实验。
 
 ## 核心能力
 
 - 实时采集主摄像头画面，发布 ROS2 图像话题并通过 Web 端推流。
-- 使用 `hobot_dnn` 调用地平线 BPU 运行 YOLO26 模型，检测电缆表面缺陷。
-- 在视觉检测前提取电缆暗色带，过滤背景干扰，并对 YOLO 框做 OpenCV ROI 精修。
+- 视觉检测采用级联式架构：训练阶段使用 DINOv3 作为 teacher 蒸馏 YOLO26/YOLO26n student；部署阶段在 RDK X5 BPU 上运行 YOLO26 做缺陷粗定位；运行时再用 OpenCV ROI 特征做精定位。
+- 在视觉检测前提取电缆暗色带，过滤背景干扰，并对 YOLO 粗框做 blackhat、梯度、局部对比度等 OpenCV 精修。
 - 支持红外摄像头接入，输出热异常诊断结果和伪彩色红外画面。
 - 通过 GPIO 控制步进电机，支持连续运动、定距移动、移动到指定位置、速度百分比和软件行程限位。
 - Web 控制台提供视频流、红外流、电机控制、状态面板、数据集管理、样本复核、模型上传/部署和巡检报告入口。
 - 集成 AD5933 阻抗检测模块，可进行低阻、开路、潮湿等辅助诊断。
 - 支持 YOLO 数据集上传、误报样本收集、复核样本池、训练流水线、ONNX 导出和 RDK X5 BPU BIN 转换。
-- 提供 OpenAI 兼容的大模型助手接口，用于运维问答和巡检辅助。
+- 提供 OpenClaw 兼容的大模型助手接口，用于运维问答和巡检辅助；当前实现保留 `/api/claw/command` 兼容接口，并直接读取 OpenClaw 配置调用模型 API。
 
 ## 硬件与运行环境
 
@@ -32,13 +32,13 @@
 cable1/
 ├── src/
 │   ├── camera_pkg/          # 摄像头采集节点
-│   ├── detection_pkg/       # 可见光 YOLO/BPU 检测和红外检测节点
+│   ├── detection_pkg/       # YOLO26/BPU 粗定位、OpenCV 精定位和红外检测节点
 │   ├── image_saver_pkg/     # 定时/缺陷触发图像保存节点
 │   └── motor_control_pkg/   # 电机控制节点和 Flask Web 后端
 ├── ad5933_cable_analyzer/   # AD5933 阻抗/通断/开路定位分析模块
 ├── config/                  # 当前模型、运动位置和运行参数
 ├── scripts/                 # 训练到 BIN 转换流水线、状态脚本
-├── tools/                   # YOLO26 训练、导出、mapper 转换工具
+├── tools/                   # DINOv3 蒸馏、YOLO26 训练/导出和 mapper 转换工具
 ├── third_party/tessdata/    # OCR/视觉相关第三方数据
 ├── agentic_aiops_clean_sidebar.html  # Web 前端页面
 ├── start_system.sh          # 板端一键启动脚本
@@ -117,7 +117,7 @@ python3 scripts/train_to_bin_pipeline.py \
   --output-dir /home/sunrise/cable1/runs/<run_name>
 ```
 
-流水线会优先训练或复用 `.pt`，再导出 BPU 友好的 ONNX，并通过 `hb_mapper` 或 Docker 中的 OpenExplorer 工具链生成 RDK X5 可用的 `.bin`。
+流水线会优先训练或复用 `.pt`。启用蒸馏时，DINOv3 只在训练阶段作为 teacher 提供特征监督，生成的 `best.pt` 仍是普通 YOLO26/YOLO26n 检测模型；随后导出 BPU 友好的 ONNX，并通过 `hb_mapper` 或 Docker 中的 OpenExplorer 工具链生成 RDK X5 可用的 `.bin`。板端运行时链路为 `YOLO26/BPU 粗定位 -> OpenCV ROI 精定位 -> 结果发布/报告融合`。
 
 ## Web 控制台
 
@@ -130,13 +130,13 @@ python3 scripts/train_to_bin_pipeline.py \
 - `/api/inspection/*`：巡检会话与报告
 - `/api/ad5933/*`：阻抗分析动作和状态
 - `/api/datasets`、`/api/models`、`/api/pipeline/*`：数据集、模型和训练部署管理
-- `/api/claw/command`：大模型助手兼容接口
+- `/api/claw/command`：OpenClaw 兼容助手接口，读取 OpenClaw 风格配置后直连模型 API
 
 前端页面为仓库根目录的 `agentic_aiops_clean_sidebar.html`。
 
 ## API 密钥
 
-仓库不会提交真实 API Key。大模型相关功能优先读取环境变量，例如：
+仓库不会提交真实 API Key。大模型和 OpenClaw 兼容助手相关功能优先读取环境变量，例如：
 
 ```bash
 export DASHSCOPE_API_KEY=your_key_here
@@ -151,6 +151,8 @@ chmod 600 .dashscope_key
 ```
 
 `.dashscope_key` 和 `.deepseek_key` 已被 `.gitignore` 排除，只应保留在本地部署环境。
+
+助手接口默认兼容前端的 `/api/claw/command` 调用，并可读取 `/home/sunrise/.openclaw/openclaw.json`。需要注意的是，当前代码不是通过 OpenClaw Gateway 转发，而是读取 OpenClaw 配置后直接请求模型服务。
 
 ## 依赖
 

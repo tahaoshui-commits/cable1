@@ -1,20 +1,20 @@
 # Rixing Bawanli: RDK X5 Cable Defect Inspection System
 
-`cable1` is a ROS2-based cable inspection project for the Horizon RDK X5 board. It combines visible-light camera capture, YOLO26 inference on the Horizon BPU, infrared hotspot diagnostics, stepper motor control, a browser-based operations console, AD5933 impedance analysis, dataset/model lifecycle tools, and an LLM assistant into one edge-AI inspection workflow.
+`cable1` is a ROS2-based cable inspection project for the Horizon RDK X5 board. It combines visible-light camera capture, DINOv3 distillation training, YOLO26 coarse localization on the Horizon BPU, OpenCV fine localization, infrared hotspot diagnostics, stepper motor control, a browser-based operations console, AD5933 impedance analysis, dataset/model lifecycle tools, and an OpenClaw-compatible assistant endpoint into one edge-AI inspection workflow.
 
 The project is designed for cable surface defect inspection, RDK X5 edge inference demos, teaching, and multimodal inspection experiments that combine vision, infrared, and impedance signals.
 
 ## Core Features
 
 - Real-time camera capture with ROS2 image publishing and MJPEG streaming.
-- YOLO26 defect detection accelerated by `hobot_dnn` on the Horizon BPU.
-- Cable-band extraction and OpenCV ROI refinement to reduce background false positives.
+- Cascaded visual detection: DINOv3 acts as a training-time teacher for YOLO26/YOLO26n distillation; the deployed model runs YOLO26 coarse localization on the RDK X5 BPU; OpenCV ROI analysis then performs fine localization.
+- Cable-band extraction filters background clutter, and OpenCV blackhat, gradient, and local-contrast features refine the YOLO coarse boxes.
 - Infrared camera ingestion with pseudo-color display and relative hotspot diagnostics.
 - GPIO stepper motor control with continuous movement, distance moves, move-to-position, speed percentage, button input, and software travel limits.
 - Web console for video streams, motor control, runtime health, datasets, review samples, model upload/deployment, and inspection reports.
 - AD5933 impedance analysis for low-resistance, open-circuit, moisture, and cable-location assisted checks.
 - Dataset upload, false-positive capture, review sample pools, YOLO training, ONNX export, and RDK X5 BPU BIN conversion.
-- OpenAI-compatible assistant endpoint for operator support and AIOps-style troubleshooting.
+- OpenClaw-compatible assistant endpoint for operator support and inspection troubleshooting. The current backend keeps `/api/claw/command`, reads OpenClaw-style configuration, and calls the model API directly instead of routing through OpenClaw Gateway.
 
 ## Hardware And Runtime
 
@@ -32,13 +32,13 @@ The project is designed for cable surface defect inspection, RDK X5 edge inferen
 cable1/
 ├── src/
 │   ├── camera_pkg/          # Camera capture node
-│   ├── detection_pkg/       # Visible-light YOLO/BPU and infrared detection nodes
+│   ├── detection_pkg/       # YOLO26/BPU coarse localization, OpenCV refinement, infrared detection
 │   ├── image_saver_pkg/     # Periodic and defect-triggered image saver
 │   └── motor_control_pkg/   # Motor node and Flask web backend
 ├── ad5933_cable_analyzer/   # AD5933 impedance and cable diagnosis module
 ├── config/                  # Current model, motor position, and runtime params
 ├── scripts/                 # Training-to-BIN pipeline and status scripts
-├── tools/                   # YOLO26 training, export, and mapper tools
+├── tools/                   # DINOv3 distillation, YOLO26 training/export, and mapper tools
 ├── third_party/tessdata/    # Third-party OCR/vision data
 ├── agentic_aiops_clean_sidebar.html  # Web frontend
 ├── start_system.sh          # Board-side startup script
@@ -117,7 +117,7 @@ python3 scripts/train_to_bin_pipeline.py \
   --output-dir /home/sunrise/cable1/runs/<run_name>
 ```
 
-The pipeline trains or reuses a `.pt` model, exports a BPU-friendly ONNX model, and converts it to an RDK X5 `.bin` model through `hb_mapper` or the OpenExplorer Docker toolchain.
+The pipeline trains or reuses a `.pt` model. When distillation is enabled, DINOv3 is used only as a training-time teacher; the saved `best.pt` remains a normal YOLO26/YOLO26n detector. The pipeline then exports a BPU-friendly ONNX model and converts it to an RDK X5 `.bin` model through `hb_mapper` or the OpenExplorer Docker toolchain. The board-side runtime chain is `YOLO26/BPU coarse localization -> OpenCV ROI fine localization -> result publishing/report fusion`.
 
 ## Web Console
 
@@ -130,13 +130,13 @@ The pipeline trains or reuses a `.pt` model, exports a BPU-friendly ONNX model, 
 - `/api/inspection/*`: inspection sessions and reports
 - `/api/ad5933/*`: impedance analyzer actions and status
 - `/api/datasets`, `/api/models`, `/api/pipeline/*`: dataset, model, and deployment lifecycle
-- `/api/claw/command`: LLM assistant compatibility endpoint
+- `/api/claw/command`: OpenClaw-compatible assistant endpoint that reads OpenClaw-style configuration and calls the model API directly
 
 The frontend file is `agentic_aiops_clean_sidebar.html` in the repository root.
 
 ## API Keys
 
-Real API keys are not committed. LLM features prefer environment variables:
+Real API keys are not committed. LLM and OpenClaw-compatible assistant features prefer environment variables:
 
 ```bash
 export DASHSCOPE_API_KEY=your_key_here
@@ -151,6 +151,8 @@ chmod 600 .dashscope_key
 ```
 
 `.dashscope_key` and `.deepseek_key` are ignored by git and should stay local to the deployment environment.
+
+The assistant keeps the frontend-compatible `/api/claw/command` route and can read `/home/sunrise/.openclaw/openclaw.json`. In this codebase it does not use OpenClaw Gateway; it reads the OpenClaw-style configuration and sends requests directly to the configured model service.
 
 ## Dependencies
 
