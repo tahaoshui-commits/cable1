@@ -134,26 +134,6 @@ python3 scripts/train_to_bin_pipeline.py \
 
 前端页面为仓库根目录的 `agentic_aiops_clean_sidebar.html`。
 
-## API 密钥
-
-仓库不会提交真实 API Key。大模型和 OpenClaw 兼容助手相关功能优先读取环境变量，例如：
-
-```bash
-export DASHSCOPE_API_KEY=your_key_here
-export LLM_API_KEY=your_key_here
-```
-
-也可以复制示例文件到板端本地：
-
-```bash
-cp .dashscope_key.example .dashscope_key
-chmod 600 .dashscope_key
-```
-
-`.dashscope_key` 和 `.deepseek_key` 已被 `.gitignore` 排除，只应保留在本地部署环境。
-
-助手接口默认兼容前端的 `/api/claw/command` 调用，并可读取 `/home/sunrise/.openclaw/openclaw.json`。需要注意的是，当前代码不是通过 OpenClaw Gateway 转发，而是读取 OpenClaw 配置后直接请求模型服务。
-
 ## 依赖
 
 板端核心依赖：

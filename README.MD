@@ -134,26 +134,6 @@ The pipeline trains or reuses a `.pt` model. When distillation is enabled, DINOv
 
 The frontend file is `agentic_aiops_clean_sidebar.html` in the repository root.
 
-## API Keys
-
-Real API keys are not committed. LLM and OpenClaw-compatible assistant features prefer environment variables:
-
-```bash
-export DASHSCOPE_API_KEY=your_key_here
-export LLM_API_KEY=your_key_here
-```
-
-You can also create local board-only key files:
-
-```bash
-cp .dashscope_key.example .dashscope_key
-chmod 600 .dashscope_key
-```
-
-`.dashscope_key` and `.deepseek_key` are ignored by git and should stay local to the deployment environment.
-
-The assistant keeps the frontend-compatible `/api/claw/command` route and can read `/home/sunrise/.openclaw/openclaw.json`. In this codebase it does not use OpenClaw Gateway; it reads the OpenClaw-style configuration and sends requests directly to the configured model service.
-
 ## Dependencies
 
 Core board dependencies:
