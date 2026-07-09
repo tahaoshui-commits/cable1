@@ -45,7 +45,7 @@ cable1/
 └── WEB_GUIDE.md             # Web console guide
 ```
 
-> This repository currently does not include a `launch/` directory. Use `start_system.sh` for normal board startup, or run the ROS2 console scripts individually when debugging.
+> Use `start_system.sh` for normal board startup, or run the ROS2 console scripts individually when debugging.
 
 ## Quick Start
 

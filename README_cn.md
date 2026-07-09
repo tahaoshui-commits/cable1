@@ -45,7 +45,7 @@ cable1/
 └── WEB_GUIDE.md             # Web 控制台说明
 ```
 
-> 当前仓库没有提交 `launch/` 目录，推荐使用 `start_system.sh` 或单独运行各个 ROS2 console script。
+> 使用 `start_system.sh` 或单独运行各个 ROS2 console script。
 
 ## 快速启动
 
